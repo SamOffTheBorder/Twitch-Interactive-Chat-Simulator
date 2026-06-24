@@ -2,6 +2,14 @@
 .env
 sessions/
 
+# Docusaurus
+docs/node_modules/
+docs/.docusaurus/
+docs/build/
+
+# OpenSpec
+.openspec/cache/
+
 # Python
 __pycache__/
 *.py[cod]
