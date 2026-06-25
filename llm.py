@@ -25,7 +25,7 @@ def _get_openrouter() -> OpenAI:
     return _openrouter
 
 
-def complete(system: str, user: str, max_tokens: int = 30) -> str:
+def complete(system: str, user: str, max_tokens: int = 40) -> str:
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": user},

@@ -226,6 +226,7 @@ class ViewerPersona:
 
     def _do_highlight(self):
         try:
+            import rewards
             system = (
                 f"You are a Twitch viewer. {self.archetype['style']} "
                 "Send ONE short chat message, 1-5 words. Output ONLY the message, no quotes. "
@@ -235,9 +236,12 @@ class ViewerPersona:
             if not text or text.upper() == "SKIP":
                 text = "W"
             text = _clean(text)
-            print(f"[Viewer {self.idx}] → {text}")
-            future = asyncio.run_coroutine_threadsafe(self._send(text), self._loop)
-            future.result(timeout=10)
+            print(f"[Viewer {self.idx}] → {text} (highlight)")
+            token = config.TWITCH_TOKENS[self.idx] if self.idx < len(config.TWITCH_TOKENS) else ""
+            if not rewards.redeem(token, config.HIGHLIGHT_REWARD_ID, text):
+                # Fall back to regular chat if redemption fails
+                future = asyncio.run_coroutine_threadsafe(self._send(text), self._loop)
+                future.result(timeout=10)
         except Exception as e:
             print(f"[Viewer {self.idx}] Highlight error: {e}")
 

@@ -3,3 +3,5 @@ twitchio>=2.10.0
 openai>=1.0.0
 SpeechRecognition>=3.10.0
 python-dotenv==1.0.1
+playwright>=1.40.0
+playwright-stealth>=1.0.6

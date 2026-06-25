@@ -27,6 +27,12 @@ TTS_MIN_INTERVAL = int(os.getenv("TTS_MIN_INTERVAL", "180"))
 TTS_MAX_INTERVAL = int(os.getenv("TTS_MAX_INTERVAL", "480"))
 
 
+BROWSER_SESSIONS_ENABLED = os.getenv("BROWSER_SESSIONS_ENABLED", "false").lower() == "true"
+BROWSER_CYCLE: list[str] = [
+    b.strip().lower() for b in os.getenv("BROWSER_CYCLE", "chromium,firefox,webkit,chrome,msedge").split(",") if b.strip()
+]
+
+
 def validate():
     missing = [
         name

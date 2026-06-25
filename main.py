@@ -7,6 +7,8 @@ import time
 import urllib.request
 
 import config
+if config.BROWSER_SESSIONS_ENABLED:
+    import browser_sessions
 from audio import AudioCapture
 from chat import ChatBot, get_real_chatters
 from responder import Responder
@@ -77,6 +79,9 @@ def _print_diag(responder: Responder, bots: list[ChatBot], stream_info: StreamIn
     nicks = [b.nick for b in bots if b.nick]
     print(f"  Bot accounts       : {len(nicks)} connected — {', '.join(nicks) if nicks else 'none yet'}")
     responder.print_status()
+    if config.BROWSER_SESSIONS_ENABLED:
+        for s in browser_sessions.get_status():
+            print(f"  Browser {s['index']} [{s['browser_type']}]: VPN={s['vpn_name']}, status={s['vpn_status']}")
     print("[Diagnostics] ══════════════════════════════\n")
 
 
@@ -110,9 +115,13 @@ def _command_loop(responder: Responder, tts: TTSSender, bots: list[ChatBot], str
                 _print_diag(responder, bots, stream_info)
             elif cmd == "stop":
                 print("[Commands] Stopping...")
+                if config.BROWSER_SESSIONS_ENABLED:
+                    browser_sessions.close_all()
                 os._exit(0)
             elif cmd == "restart":
                 print("[Commands] Restarting...")
+                if config.BROWSER_SESSIONS_ENABLED:
+                    browser_sessions.close_all()
                 subprocess.Popen([sys.executable] + sys.argv)
                 os._exit(0)
             elif cmd in ("help", "h", "?"):
@@ -126,6 +135,8 @@ def _command_loop(responder: Responder, tts: TTSSender, bots: list[ChatBot], str
 async def main():
     config.validate()
     _ensure_ollama()
+    if config.BROWSER_SESSIONS_ENABLED:
+        browser_sessions.launch_sessions(config.TWITCH_TOKENS, url=f"https://www.twitch.tv/{config.TWITCH_CHANNEL}")
 
     loop = asyncio.get_running_loop()
     bot_nicks: set[str] = set()
@@ -159,4 +170,6 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
+        if config.BROWSER_SESSIONS_ENABLED:
+            browser_sessions.close_all()
         print("\n[Main] Stopped.")

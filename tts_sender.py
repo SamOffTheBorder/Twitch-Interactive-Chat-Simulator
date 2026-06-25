@@ -6,6 +6,7 @@ from typing import Callable, Coroutine
 
 import llm
 import config
+import rewards
 
 TTS_SYSTEM = """\
 You are a real viewer redeeming Text-to-Speech on a Twitch stream.
@@ -58,8 +59,12 @@ class TTSSender:
             text = text.strip().split("\n")[0].strip().strip('"\'')
             text = text[:100]
             print(f"[TTS] → {text}")
-            send_fn = random.choice(self._send_fns)
-            future = asyncio.run_coroutine_threadsafe(send_fn(text), self._loop)
-            future.result(timeout=10)
+            idx = random.randrange(len(config.TWITCH_TOKENS))
+            token = config.TWITCH_TOKENS[idx]
+            if not rewards.redeem(token, config.TTS_REWARD_ID, text):
+                # Fall back to regular chat if redemption fails
+                send_fn = self._send_fns[idx] if idx < len(self._send_fns) else random.choice(self._send_fns)
+                future = asyncio.run_coroutine_threadsafe(send_fn(text), self._loop)
+                future.result(timeout=10)
         except Exception as e:
             print(f"[TTS] Error: {e}")
