@@ -28,7 +28,7 @@ It contains your API keys and tokens. It is excluded by `.gitignore` — keep it
 | `LOCAL_LLM_MODEL` | Ollama model name | `dolphin-llama3` |
 | `LOCAL_LLM_URL` | Ollama endpoint | `http://localhost:11434/v1` |
 | `OPENROUTER_API_KEY` | From [openrouter.ai](https://openrouter.ai) | required |
-| `OPENROUTER_MODEL` | Primary cloud model | `nvidia/nemotron-3-ultra-550b-a55b:free` |
+| `OPENROUTER_MODEL` | Primary cloud model | `nvidia/nemotron-3-super-120b-a12b:free` |
 | `OPENROUTER_FALLBACK_MODEL` | Secondary cloud model | `meta-llama/llama-3.3-70b-instruct:free` |
 
 The bot tries **Ollama first**, then falls back to OpenRouter automatically if Ollama is unavailable or fails.
