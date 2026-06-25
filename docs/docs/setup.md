@@ -46,11 +46,7 @@ If you skip this, the bot uses OpenRouter's free tier instead (slower, requires 
 
 ## 6. Generate bot tokens
 
-Run once per bot account — it opens a browser and handles the OAuth flow:
-
-```bash
-python token_gen.py
-```
+For each bot account, go to **[twitchtokengenerator.com](https://twitchtokengenerator.com)**, select only `chat:read` and `chat:edit`, and generate a token while logged in as that bot account. Paste each token into `TWITCH_TOKENS` in `.env`, comma-separated.
 
 See [Bot Accounts](./bot-accounts) for the full guide.
 

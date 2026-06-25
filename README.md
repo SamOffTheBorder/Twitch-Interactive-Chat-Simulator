@@ -49,20 +49,25 @@ Open `.env` and fill in:
 | Variable | Where to get it |
 |---|---|
 | `TWITCH_CHANNEL` | Your Twitch username |
-| `TWITCH_TOKENS` | One token per bot account — run `python token_gen.py` for each |
-| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | [dev.twitch.tv/console](https://dev.twitch.tv/console) → Register an app, redirect URL: `http://localhost:3000` |
+| `TWITCH_TOKENS` | One token per bot account — see step 3 below |
+| `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | [dev.twitch.tv/console](https://dev.twitch.tv/console) → Register an app |
 | `OPENROUTER_API_KEY` | [openrouter.ai](https://openrouter.ai) — free tier available |
 | `LOCAL_LLM_MODEL` | Name of your Ollama model e.g. `dolphin-llama3` — leave blank to use OpenRouter only |
 
 ### 3. Generate bot tokens
 
-Run this once per bot account (log in as each bot account in the browser that opens):
+For each bot account, go to **[twitchtokengenerator.com](https://twitchtokengenerator.com)** and generate a token with only these two scopes:
 
-```bash
-python token_gen.py
+- `chat:read`
+- `chat:edit`
+
+Log in as the bot account when prompted. Copy the **Access Token** and paste it into `TWITCH_TOKENS` in `.env`, comma-separated:
+
+```
+TWITCH_TOKENS=token_account1,token_account2,token_account3
 ```
 
-Paste each token into `TWITCH_TOKENS` in `.env`, comma-separated.
+Repeat for each bot account. These tokens last much longer than tokens generated via standard OAuth flows and don't require running any local scripts.
 
 ### 4. Install local LLM (optional but recommended)
 
@@ -137,7 +142,7 @@ Type these into the terminal while the bot is running:
 | `tts_sender.py` | Periodic TTS-style messages |
 | `browser_sessions.py` | Playwright browser pool for channel point redemptions |
 | `setup_sessions.py` | One-time browser login setup |
-| `token_gen.py` | One-time OAuth token generator for bot accounts |
+| `token_gen.py` | Alternative OAuth token generator (optional) |
 | `config.py` | Loads all settings from `.env` |
 
 ---

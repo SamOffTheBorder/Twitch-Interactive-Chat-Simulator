@@ -8,40 +8,39 @@ Each bot account needs its own Twitch account and an OAuth token with `chat:read
 
 ## Creating accounts
 
-Create separate Twitch accounts for each bot. Use different email addresses. The number of accounts = the number of simultaneous viewer personas.
+Create separate Twitch accounts for each bot — one account per viewer persona. The number of accounts equals the number of simultaneous viewers the bot simulates.
 
 ## Generating tokens
 
-The project includes a token generator that handles the OAuth flow automatically:
+Use **[twitchtokengenerator.com](https://twitchtokengenerator.com)** to generate a token for each account:
 
-```bash
-python token_gen.py
+1. Go to [twitchtokengenerator.com](https://twitchtokengenerator.com)
+2. Select only these two scopes:
+   - `chat:read`
+   - `chat:edit`
+3. Click **Generate Token**
+4. Log in as the bot account when Twitch prompts you
+5. Copy the **Access Token**
+
+Paste it into `TWITCH_TOKENS` in your `.env`, comma-separated:
+
+```
+TWITCH_TOKENS=token_account1,token_account2,token_account3
 ```
 
-It will:
-1. Open a browser window to Twitch's login page
-2. You log in as the bot account
-3. The token is printed to your terminal
+Repeat for each bot account. Use a different browser or incognito window per account so sessions don't conflict.
 
-Paste the token into `TWITCH_TOKENS` in your `.env`, comma-separated:
-
-```
-TWITCH_TOKENS=token_for_account1,token_for_account2,token_for_account3
-```
-
-Run the script once per account. Use a private/incognito window for each one so sessions don't overlap.
-
-:::tip
-The number of viewers is automatically set to however many tokens you have — no other config needed.
+:::tip Why twitchtokengenerator?
+Tokens generated here with only `chat:read` + `chat:edit` scopes last significantly longer than standard OAuth flow tokens and don't require running any local scripts or keeping a server running.
 :::
 
 ## Adding more accounts later
 
-1. Create the Twitch account
-2. Run `python token_gen.py` and log in as the new account
+1. Create the new Twitch account
+2. Go to [twitchtokengenerator.com](https://twitchtokengenerator.com) and generate a token logged in as that account
 3. Append the token to `TWITCH_TOKENS` in `.env`
-4. Restart the bot
+4. Restart the bot — it auto-detects the new account
 
 ## Token expiry
 
-Tokens generated via the built-in OAuth flow don't expire unless the account password changes or the app authorization is revoked. If a bot stops connecting, regenerate its token.
+If a bot stops connecting with an authentication error, that token has expired. Just go back to [twitchtokengenerator.com](https://twitchtokengenerator.com), log in as that account again, and replace the old token in `.env`.
