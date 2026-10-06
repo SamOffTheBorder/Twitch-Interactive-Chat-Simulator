@@ -23,16 +23,19 @@ _EMOJI_TOKEN_RE = re.compile(
 
 
 def _emoji_filter(text: str) -> str:
-    """P(keep nth emoji/emote) = 1/log2(n+1). First always kept, rest taper off."""
+    """Keep up to 6 emoji/emote tokens; drop any beyond that."""
     matches = list(_EMOJI_TOKEN_RE.finditer(text))
-    if len(matches) <= 1:
+    if len(matches) <= 6:
         return text
-    to_drop = [m for i, m in enumerate(matches) if random.random() > 1.0 / math.log2(i + 2)]
+    to_drop = matches[6:]
     for m in reversed(to_drop):
         left = text[:m.start()].rstrip()
         right = text[m.end():].lstrip()
         text = left + (" " if left and right else "") + right
     return text.strip()
+
+
+_SPAM_EMOJIS = ["💀", "🗣️", "🔥", "😭", "🐐", "👀", "🤣", "💯", "😤", "🫡", "🤯", "👏"]
 
 
 _CLAUSE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
@@ -56,6 +59,66 @@ _BRACKET_RE = re.compile(r"\[.*?\]")
 _NUMBERED_RE = re.compile(r"\b\d+(?:st|nd|rd|th)\s+\w+", re.IGNORECASE)
 _HR_RE = re.compile(r"\s*[-*_]{2,}\s*")  # markdown horizontal rules: ---, ***, ___
 
+def _randomize_caps(text: str) -> str:
+    """Shift capitalization on individual words to mimic uneven real-chat typing."""
+    words = text.split()
+    out = []
+    for w in words:
+        r = random.random()
+        if w.isupper() and len(w) > 2 and r < 0.30:
+            out.append(w.lower())        # soften a full-caps word 30% of the time
+        elif not w.isupper() and r < 0.07:
+            out.append(w.upper())        # randomly shout a word 7% of the time
+        else:
+            out.append(w)
+    return " ".join(out)
+
+
+_LABEL_RE = re.compile(r'^\w[\w ]{0,15}[:\-–]\s*')  # "React: " "REACTION - " "Output: " etc.
+
+# Patterns that mean the LLM leaked meta-commentary or generated dangerous content
+_FILTER_RE = re.compile(
+    r'https?://'                          # URLs — never let bots post links
+    r'|No streamer'                       # "No streamer interaction at the moment"
+    r'|\binteraction\b'                   # meta-commentary
+    r'|at the moment'                     # "at the moment"
+    r'|The streamer (is|was|just|said)'   # describing the streamer
+    r'|streamer (just|is|was) (said|play|do)'
+    , re.IGNORECASE
+)
+
+# Adjacent keys on a QWERTY keyboard — used to generate realistic transposition typos
+_ADJACENT: dict[str, str] = {
+    "a": "sqwz", "b": "vghn", "c": "xdfv", "d": "serfcx", "e": "wrsdf",
+    "f": "drtgvc", "g": "ftyhbv", "h": "gyujnb", "i": "uojkl", "j": "huikmn",
+    "k": "jiolm", "l": "kop", "m": "njk", "n": "bhjm", "o": "iplk",
+    "p": "ol", "q": "wa", "r": "edft", "s": "aewdxz", "t": "rfgy",
+    "u": "yhij", "v": "cfgb", "w": "qase", "x": "zsdc", "y": "tghu", "z": "asx",
+}
+
+
+def _add_typos(text: str) -> str:
+    """6% chance per word to introduce a realistic typo (adjacent-key swap or missing letter)."""
+    words = text.split()
+    out = []
+    for w in words:
+        if len(w) >= 3 and random.random() < 0.06:
+            typo_type = random.random()
+            idx = random.randint(0, len(w) - 1)
+            ch = w[idx].lower()
+            if typo_type < 0.45 and ch in _ADJACENT:
+                # Replace with an adjacent key
+                replacement = random.choice(_ADJACENT[ch])
+                w = w[:idx] + replacement + w[idx + 1:]
+            elif typo_type < 0.70:
+                # Drop a letter
+                w = w[:idx] + w[idx + 1:]
+            else:
+                # Double a letter
+                w = w[:idx] + w[idx] + w[idx:]
+        out.append(w)
+    return " ".join(out)
+
 def _clean(text: str) -> str:
     text = text.strip()
     # Chat is single-line — keep only the first line
@@ -64,6 +127,11 @@ def _clean(text: str) -> str:
     m = _HR_RE.search(text)
     if m:
         text = text[:m.start()].strip()
+    # Strip LLM meta-label prefixes like "React: " "REACTION - " "Message: "
+    text = _LABEL_RE.sub("", text).strip()
+    # Reject URLs and meta-commentary that leaked from the model
+    if _FILTER_RE.search(text):
+        return ""
     # Strip outer quotes the LLM sometimes wraps the whole message in
     if len(text) >= 2 and text[0] in ('"', "'") and text[-1] == text[0]:
         text = text[1:-1].strip()
@@ -84,28 +152,35 @@ def _clean(text: str) -> str:
             (text.rfind(c, 0, 80) for c in ".!?"), default=-1
         )
         text = text[:boundary + 1] if boundary > 20 else text[:80]
+    text = _randomize_caps(text)
+    text = _add_typos(text)
     return text.strip()
 
 
 ARCHETYPES = [
     {
         "name": "hype",
-        "style": 'Hype viewer. Short energy bursts. NO greetings, NO questions. Examples: "LETS GO", "W", "POG", "bro no way", "KEKW", "AYOOO", "NOOO", "he cooked".',
-        "weight": 0.20,
+        "style": 'Hype viewer. Short energy bursts. Use emojis and emotes freely — spam them. NO greetings, NO questions. Examples: "LETS GO 🔥", "W 💀💀💀", "POG", "bro no way 😭😭", "KEKW", "AYOOO 🗣️🗣️🗣️", "NOOO 💀", "he cooked 🐐", "💀💀💀", "🔥🔥🔥🔥", "🗣️🗣️🗣️🗣️🗣️".',
+        "weight": 0.15,
     },
     {
         "name": "casual",
-        "style": 'Chill viewer, all lowercase. NO greetings, NO questions. Examples: "lol", "ngl tho", "bro what", "same", "wild", "welp", "nah", "L", "mid".',
-        "weight": 0.40,
+        "style": 'Chill viewer, mostly lowercase, mixed caps. Use emojis sometimes. NO greetings, NO questions. Examples: "lol 💀", "ngl tho", "bro what 😭", "same", "wild", "welp", "nah", "L", "mid", "😭😭😭", "👀".',
+        "weight": 0.30,
     },
     {
         "name": "react",
-        "style": 'Reacts briefly to what just happened. NO questions, NO greetings. Examples: "wait that worked??", "bro same lmao", "this guy", "he cooked", "sold", "real".',
+        "style": 'Reacts briefly to what just happened. Use emojis. NO questions, NO greetings. Examples: "wait that worked?? 💀", "bro same lmao", "this guy 🗣️", "he cooked 🐐🐐", "sold", "real 💯", "😤😤", "🔥🔥🔥".',
         "weight": 0.20,
     },
     {
         "name": "lurker",
-        "style": 'Rarely talks. When you do, 1-3 words max. NO greetings, NO questions. Examples: "lol", "gg", "nah", "ok", "same", "W".',
+        "style": 'Rarely talks. When you do, 1-3 words or pure emoji spam. NO greetings, NO questions. Examples: "lol", "gg", "nah", "W", "💀", "👀", "🔥🔥", "😭😭😭".',
+        "weight": 0.15,
+    },
+    {
+        "name": "questioner",
+        "style": 'Curious casual viewer. Ask ONE short question about what just happened — genuinely curious, not sarcastic. Under 8 words. NO greetings. Examples: "wait did it land tho", "bro where was this 👀", "nah fr tho?", "did he make it 😭", "wait really?? 💀", "how tho", "bro what happened next".',
         "weight": 0.20,
     },
 ]
@@ -114,12 +189,15 @@ _BASE_PROMPT = """\
 You are a real Twitch viewer in chat. {style}
 
 Output ONLY your chat message — nothing else. No labels, no quotes, no explanations, no reasoning.
-- 1-5 words usually. Absolute max 80 characters.
-- ALL CAPS ok. Repeated letters ok (AYOOO, NOOOOO).
-- No questions. No greetings. No advice. No hashtags.
+- 1-6 words usually. Absolute max 80 characters.
+- ALL CAPS ok. Repeated letters ok (AYOOO, NOOOOO). Mixed caps fine.
+- Emojis and Twitch emotes welcome — spam the same one multiple times if hyped: 💀💀💀 or 🗣️🗣️🗣️🗣️ or 🔥🔥
+- Sometimes your ENTIRE message can be just emoji spam: "💀💀💀" or "🗣️🗣️🗣️🗣️🗣️"
+- No greetings. No advice. No hashtags.
+- React specifically to what the streamer said — mention what actually happened, not just generic hype.
 - Never reveal you are a bot or AI. Never explain your response.
-- Good: REAL, L, bro lol, ngl, W, welp, BRUH, he cooked, nah, mid, AYOOOO
-- Bad: questions, greetings, meta-commentary, parenthetical explanations
+- Good: REAL, L 💀, bro lol, ngl, W 🔥, welp, BRUH, he cooked 🐐, 💀💀💀, 🗣️🗣️🗣️, "wait did it land tho 👀"
+- Bad: greetings, meta-commentary, parenthetical explanations, ignoring what was said
 - If nothing happened worth reacting to, reply: SKIP
 """
 
@@ -134,12 +212,14 @@ class ViewerPersona:
         send_fn: Callable[[str], Coroutine],
         loop: asyncio.AbstractEventLoop,
         stream_info: "StreamInfo | None" = None,
+        get_transcript: "Callable[[], str] | None" = None,
     ):
         self.idx = idx
         self.archetype = archetype
         self._send = send_fn
         self._loop = loop
         self._stream_info = stream_info
+        self._get_transcript = get_transcript or (lambda: "")
         self._cooldown = random.uniform(60, 120) #Message Cooldown
         self._prob = random.uniform(0.10, 0.20) #Chance Bots respond to Audio in the stream
         self._last_sent = 0.0
@@ -147,24 +227,15 @@ class ViewerPersona:
         self._active = False
         self._system = _BASE_PROMPT.format(style=archetype["style"])
 
-    def _context_hint(self) -> str:
-        """60% stream title/category, 20% streamer name, 20% no extra context."""
+    def _stream_context(self) -> str:
+        """Returns stream game/category as context — NOT the raw title to avoid bots echoing it."""
         if not self._stream_info:
             return ""
         info = self._stream_info.snapshot()
-        roll = random.random()
-        if roll < 0.60:
-            parts = []
-            if info["category"]:
-                parts.append(info["category"])
-            if info["title"]:
-                parts.append(f'"{info["title"]}"')
-            if parts:
-                return " (stream is " + ", ".join(parts) + ")"
-        elif roll < 0.80:
-            streamer = info["streamer"] or config.TWITCH_CHANNEL
-            return f" (streamer is {streamer})"
-        return ""
+        if info.get("category"):
+            return f" (playing {info['category']})"
+        streamer = info.get("streamer") or config.TWITCH_CHANNEL
+        return f" (stream: {streamer})" if streamer else ""
 
     def _dispatch(self, text: str):
         future = asyncio.run_coroutine_threadsafe(self._send(text), self._loop)
@@ -184,6 +255,8 @@ class ViewerPersona:
             )
             if text and text.upper() != "SKIP":
                 text = _clean(text)
+                if not text:
+                    return
                 print(f"[Viewer {self.idx} / {self.archetype['name']}] ↩ {text}")
                 self._dispatch(text)
         except Exception as e:
@@ -227,19 +300,26 @@ class ViewerPersona:
     def _do_highlight(self):
         try:
             import rewards
+            ctx = self._stream_context()
+            recent = self._get_transcript()
             system = (
                 f"You are a Twitch viewer. {self.archetype['style']} "
-                "Send ONE short chat message, 1-5 words. Output ONLY the message, no quotes. "
+                "Send ONE short chat message, 1-8 words. Output ONLY the message, no quotes. "
                 "Real examples: lol, W, bro what, ngl, AYOOO, he cooked, same, nah, mid."
             )
-            text = llm.complete(system, "Say something in chat." + self._context_hint())
+            prompt = (
+                f'The streamer recently said: "{recent}". Say something in chat about it{ctx}.'
+                if recent else f"Say something in chat{ctx}."
+            )
+            text = llm.complete(system, prompt)
             if not text or text.upper() == "SKIP":
                 text = "W"
-            text = _clean(text)
+            text = _clean(text) or "W"
             print(f"[Viewer {self.idx}] → {text} (highlight)")
-            token = config.TWITCH_TOKENS[self.idx] if self.idx < len(config.TWITCH_TOKENS) else ""
+            token_idx = self.idx - 1
+            token = config.TWITCH_TOKENS[token_idx] if token_idx < len(config.TWITCH_TOKENS) else ""
             if not rewards.redeem(token, config.HIGHLIGHT_REWARD_ID, text):
-                # Fall back to regular chat if redemption fails
+                print(f"[Highlight] Redemption failed (reward_id={config.HIGHLIGHT_REWARD_ID!r}, token=…{token[-6:]}) — falling back to chat")
                 future = asyncio.run_coroutine_threadsafe(self._send(text), self._loop)
                 future.result(timeout=10)
         except Exception as e:
@@ -247,21 +327,37 @@ class ViewerPersona:
 
     def _spontaneous(self):
         try:
-            # Skip-free prompt — don't include the SKIP rule at all so the model can't choose it
-            system = (
-                f"You are a Twitch viewer. {self.archetype['style']} "
-                "Send ONE short chat message, 1-5 words. "
-                "Output ONLY the message itself — no quotes, no labels, no punctuation outside the message. "
-                "Real examples: lol, W, bro what, ngl, AYOOO, he cooked, same, nah, mid, REAL. "
-                "Never greet, never ask questions, never say you are a bot or AI."
-            )
-            hint = self._context_hint()
-            user_prompt = (
-                f"React to something happening on stream{hint}. One short reaction, no quotes."
-            )
+            # 10% chance: pure emoji burst without hitting the LLM
+            if random.random() < 0.10:
+                emoji = random.choice(_SPAM_EMOJIS)
+                text = emoji * random.randint(2, 4)
+                print(f"[Viewer {self.idx} / {self.archetype['name']}] → {text}")
+                self._dispatch(text)
+                return
+            recent = self._get_transcript()
+            ctx = self._stream_context()
+            if recent:
+                # Recent transcript exists — react to it specifically
+                system = self._system
+                user_prompt = (
+                    f'The streamer recently said: "{recent}". '
+                    f"React to this specifically{ctx}. One short message, no quotes."
+                )
+            else:
+                # No recent context — lean toward asking what's going on
+                system = (
+                    self._system
+                    + "\nTip: with nothing specific to react to, ask a short genuine question about what's happening (e.g. \"wait what's going on\", \"bro what happened\", \"what did I miss\")."
+                )
+                user_prompt = (
+                    f"You've been watching the stream{ctx}. "
+                    "React to something happening, or ask a short question about what's going on."
+                )
             text = llm.complete(system, user_prompt)
             if text and text.upper() != "SKIP":
                 text = _clean(text)
+                if not text:
+                    return
                 print(f"[Viewer {self.idx} / {self.archetype['name']}] → {text}")
                 self._dispatch(text)
                 self._maybe_follow_up(text)
@@ -273,9 +369,22 @@ class ViewerPersona:
     def _respond(self, transcript: str):
         time.sleep(random.uniform(0.2, 2.0))
         try:
-            text = llm.complete(self._system, f'Streamer said: "{transcript}"' + self._context_hint())
-            if text and text != "SKIP":
+            # 15% chance: skip LLM entirely and just spam an emoji
+            if random.random() < 0.15:
+                emoji = random.choice(_SPAM_EMOJIS)
+                text = emoji * random.randint(2, 5)
+                print(f"[Viewer {self.idx} / {self.archetype['name']}] → {text}")
+                self._dispatch(text)
+                return
+            ctx = self._stream_context()
+            text = llm.complete(
+                self._system,
+                f'Streamer just said: "{transcript}". React specifically to what was said — pick something concrete from it{ctx}.',
+            )
+            if text and text.upper() != "SKIP":
                 text = _clean(text)
+                if not text:
+                    return
                 print(f"[Viewer {self.idx} / {self.archetype['name']}] → {text}")
                 self._dispatch(text)
                 self._maybe_follow_up(text)
@@ -285,13 +394,15 @@ class ViewerPersona:
     def _respond_to_chat(self, username: str, message: str):
         time.sleep(random.uniform(0.5, 2.0))
         try:
+            ctx = self._stream_context()
             text = llm.complete(
                 self._system,
-                f'Viewer "{username}" just said in chat: "{message}" — react or respond naturally.'
-                + self._context_hint(),
+                f'Viewer "{username}" just said: "{message}". React to what they said{ctx}.',
             )
-            if text and text != "SKIP":
+            if text and text.upper() != "SKIP":
                 text = _clean(text)
+                if not text:
+                    return
                 print(f"[Viewer {self.idx} / {self.archetype['name']}] → {text}")
                 self._dispatch(text)
                 self._maybe_follow_up(text)
@@ -317,6 +428,8 @@ class Responder:
         stream_info: "StreamInfo | None" = None,
     ):
         self._text_q = transcript_queue
+        self._recent_transcripts: list[tuple[float, str]] = []  # (monotonic_time, text)
+        self._transcript_lock = threading.Lock()
 
         weights = [a["weight"] for a in ARCHETYPES]
         self._viewers = [
@@ -326,6 +439,7 @@ class Responder:
                 send_fns[i],
                 loop,
                 stream_info,
+                get_transcript=self.get_last_transcript,
             )
             for i in range(len(send_fns))
         ]
@@ -336,6 +450,13 @@ class Responder:
                 f"joins in {mins}m {secs}s, "
                 f"{v._cooldown:.0f}s cooldown, {v._prob * 100:.0f}% response chance"
             )
+
+    def get_last_transcript(self) -> str:
+        """Return all transcripts from the last 30 seconds joined as one string."""
+        now = time.monotonic()
+        with self._transcript_lock:
+            recent = [t for ts, t in self._recent_transcripts if now - ts <= 30]
+        return " ".join(recent)
 
     def trigger_test(self):
         active = [v for v in self._viewers if v._active] or self._viewers
@@ -370,6 +491,11 @@ class Responder:
         print("[Responder] Pool ready — watching for transcripts...")
         while True:
             transcript: str = self._text_q.get()
+            now = time.monotonic()
+            with self._transcript_lock:
+                self._recent_transcripts.append((now, transcript))
+                # Drop anything older than 30 seconds
+                self._recent_transcripts = [(ts, t) for ts, t in self._recent_transcripts if now - ts <= 30]
             for viewer in self._viewers:
                 viewer.consider(transcript)
             if re.search(r'\bchat\b', transcript, re.IGNORECASE):

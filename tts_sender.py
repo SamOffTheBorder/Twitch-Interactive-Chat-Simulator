@@ -9,23 +9,14 @@ import config
 import rewards
 
 TTS_SYSTEM = """\
-You are a real viewer redeeming Text-to-Speech on a Twitch stream.
-Your message will be read aloud so no emotes or emojis.
+You are a real Twitch viewer typing a TTS message. It gets read aloud — keep it SHORT.
 
 Rules:
-- 100 characters max, short is better
-- Sound natural and a little unhinged — like something a real person types without thinking
-- NO questions. NO compliments. NO advice.
-- NO emotes or emojis — they sound weird in TTS
-- Casual, slightly random, maybe a little chaotic
-- Good examples:
-    "this is actually insane bro"
-    "chat we are so back"
-    "ngl I was not expecting that"
-    "I literally just sat down and this happened"
-    "stream is going crazy rn"
-    "bro woke up and chose violence"
-    "ok that was actually wild"
+- 3 to 6 words MAX. Absolute hard limit.
+- No emotes, no emojis, no punctuation beyond a comma.
+- Lowercase. Sound like a real person typing fast.
+- Output ONLY the words — nothing else, no quotes.
+- Examples: chat we are so back / ngl that was insane / bro I was not ready / he actually did it / stream is unreal rn / ok that actually happened
 """
 
 
@@ -53,16 +44,20 @@ class TTSSender:
 
     def _fire(self):
         try:
-            text = llm.complete(TTS_SYSTEM, "Generate a TTS message for the stream.", max_tokens=25)
+            text = llm.complete(TTS_SYSTEM, "Generate a TTS message for the stream.", max_tokens=8)
             if not text:
                 return
             text = text.strip().split("\n")[0].strip().strip('"\'')
-            text = text[:100]
+            # Hard-cap at 6 words
+            words = text.split()
+            if len(words) > 6:
+                text = " ".join(words[:6])
+            text = text[:45]
             print(f"[TTS] → {text}")
             idx = random.randrange(len(config.TWITCH_TOKENS))
             token = config.TWITCH_TOKENS[idx]
             if not rewards.redeem(token, config.TTS_REWARD_ID, text):
-                # Fall back to regular chat if redemption fails
+                print(f"[TTS] Redemption failed (reward_id={config.TTS_REWARD_ID!r}, token=…{token[-6:]}) — falling back to chat")
                 send_fn = self._send_fns[idx] if idx < len(self._send_fns) else random.choice(self._send_fns)
                 future = asyncio.run_coroutine_threadsafe(send_fn(text), self._loop)
                 future.result(timeout=10)

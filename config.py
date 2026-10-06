@@ -10,8 +10,9 @@ TWITCH_STREAMER_TOKEN = os.getenv("TWITCH_STREAMER_TOKEN", "")  # optional: stre
 VIEWER_COUNT = len(TWITCH_TOKENS)
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
-OPENROUTER_FALLBACK_MODEL = os.getenv("OPENROUTER_FALLBACK_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+# Small persona-following model — better than large models for casual short-form Twitch chat
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "nousresearch/hermes-3-llama-3.1-8b:free")
+OPENROUTER_FALLBACK_MODEL = os.getenv("OPENROUTER_FALLBACK_MODEL", "meta-llama/llama-3.1-8b-instruct:free")
 LOCAL_LLM_URL = os.getenv("LOCAL_LLM_URL", "http://localhost:11434/v1")
 LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "")
 
@@ -30,6 +31,10 @@ TTS_MAX_INTERVAL = int(os.getenv("TTS_MAX_INTERVAL", "480"))
 BROWSER_SESSIONS_ENABLED = os.getenv("BROWSER_SESSIONS_ENABLED", "false").lower() == "true"
 BROWSER_CYCLE: list[str] = [
     b.strip().lower() for b in os.getenv("BROWSER_CYCLE", "chromium,firefox,webkit,chrome,msedge").split(",") if b.strip()
+]
+
+TRANSCRIBER_MODELS: list[str] = [
+    m.strip() for m in os.getenv("TRANSCRIBER_MODELS", "base.en,small.en,medium.en").split(",") if m.strip()
 ]
 
 

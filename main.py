@@ -9,11 +9,12 @@ import urllib.request
 import config
 if config.BROWSER_SESSIONS_ENABLED:
     import browser_sessions
+import rewards
 from audio import AudioCapture
 from chat import ChatBot, get_real_chatters
 from responder import Responder
 from stream_info import StreamInfo
-from transcriber import Transcriber
+from transcriber import EnsembleTranscriber
 from tts_sender import TTSSender
 
 
@@ -135,6 +136,15 @@ def _command_loop(responder: Responder, tts: TTSSender, bots: list[ChatBot], str
 async def main():
     config.validate()
     _ensure_ollama()
+    rewards.discover()
+    if not config.TTS_REWARD_ID:
+        print("[Rewards] TTS_REWARD_ID not resolved — TTS will fall back to chat")
+    else:
+        print(f"[Rewards] TTS → {config.TTS_REWARD_ID}")
+    if not config.HIGHLIGHT_REWARD_ID:
+        print("[Rewards] HIGHLIGHT_REWARD_ID not resolved — Highlight will fall back to chat")
+    else:
+        print(f"[Rewards] Highlight → {config.HIGHLIGHT_REWARD_ID}")
     if config.BROWSER_SESSIONS_ENABLED:
         browser_sessions.launch_sessions(config.TWITCH_TOKENS, url=f"https://www.twitch.tv/{config.TWITCH_CHANNEL}")
 
@@ -145,7 +155,7 @@ async def main():
 
     stream_info = StreamInfo()
     capture = AudioCapture()
-    transcriber = Transcriber(capture.queue)
+    transcriber = EnsembleTranscriber(capture.queue, config.TRANSCRIBER_MODELS)
     responder = Responder(transcriber.queue, send_fns, loop, stream_info)
     tts = TTSSender(send_fns, loop)
 
@@ -167,6 +177,8 @@ async def main():
 
 
 if __name__ == "__main__":
+    if config.BROWSER_SESSIONS_ENABLED:
+        browser_sessions.activate_vpns()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
